@@ -1,0 +1,12 @@
+# Служебные файлы ОС
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Логи и временные файлы
+*.log
+*.tmp
+
+# Настройки редакторов
+.vscode/
+.idea/

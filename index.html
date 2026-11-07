@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Всё по порядку — уютный список дел на каждый день. Задачи хранятся прямо в браузере.">
+  <title>Всё по порядку</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="app-header">
+      <h1 class="app-title">Всё по порядку</h1>
+      <svg class="title-stroke" viewBox="0 0 190 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+        <path d="M3 8.5 C 45 4.5, 95 10.5, 187 5.5"/>
+      </svg>
+      <p id="today" class="today"></p>
+    </header>
+
+    <form id="task-form" class="task-form" novalidate>
+      <label class="visually-hidden" for="task-input">Новая задача</label>
+      <input
+        id="task-input"
+        name="task"
+        type="text"
+        class="task-input"
+        placeholder="Что нужно сделать?"
+        autocomplete="off"
+      >
+      <button type="submit" class="btn-add">Добавить</button>
+    </form>
+
+    <p id="form-hint" class="hint" role="status" aria-live="polite" hidden></p>
+
+    <section class="sheet" aria-label="Задачи">
+      <svg class="sheet-star" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+        <path d="M10 3 C 10.3 7.5, 9.7 12.5, 10 17"/>
+        <path d="M3.4 6.7 C 7.6 8.9, 12.4 11.2, 16.6 13.4"/>
+        <path d="M16.6 6.6 C 12.4 8.9, 7.6 11.2, 3.4 13.5"/>
+      </svg>
+
+      <p id="counter" class="counter" aria-live="polite" hidden></p>
+
+      <ul id="task-list" class="task-list"></ul>
+
+      <p id="empty-state" class="empty-state">
+        Пока чистый лист. С чего начнём?
+      </p>
+    </section>
+
+    <div id="undo-note" class="undo-note" role="status" aria-live="polite" hidden>
+      <span id="undo-text">Задача удалена.</span>
+      <button type="button" id="undo-btn" class="btn-undo">Отменить</button>
+    </div>
+
+    <p id="storage-warning" class="warning" role="alert" hidden></p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

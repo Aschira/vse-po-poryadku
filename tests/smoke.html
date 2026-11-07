@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smoke-тесты — Всё по порядку</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.3rem; }
+  li { margin: 4px 0; }
+  .pass::marker { color: #3f7d33; }
+  .fail::marker { color: #b3261e; }
+  .fail { color: #b3261e; }
+  .summary { font-weight: 600; margin-top: 12px; }
+  /* Фиксированная ширина: в фоновой вкладке браузер может схлопывать
+     iframe с width:100% до нуля, и замеры врут. 866px ≈ десктопный лист. */
+  iframe { width: 866px; height: 480px; border: 1px solid #bbb; border-radius: 8px; margin-top: 16px; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #999; cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>Smoke-тесты приложения</h1>
+<p>Страница управляет приложением в iframe реальными DOM-событиями (submit, click, change)
+и проверяет модель, DOM и localStorage. Содержимое вашего списка бэкапится и
+восстанавливается после прогона. Тесты запускаются автоматически и кнопкой.</p>
+<p><button id="rerun">Запустить заново</button></p>
+<ol id="results"></ol>
+<p class="summary" id="summary"></p>
+<iframe id="app" src="../index.html" title="Тестируемое приложение"></iframe>
+
+<script>
+(function () {
+  'use strict';
+  var KEY = 'todo.tasks.v1';
+  var results = document.getElementById('results');
+  var summary = document.getElementById('summary');
+  var frame = document.getElementById('app');
+  var backupValue = null;
+
+  function assert(cond, msg) { if (!cond) throw new Error(msg); }
+
+  function doc() { return frame.contentDocument; }
+  function ls() { return frame.contentWindow.localStorage; }
+  function $(sel) { return doc().querySelector(sel); }
+  function $$(sel) { return [...doc().querySelectorAll(sel)]; }
+
+  function reloadApp() {
+    return new Promise(function (resolve) {
+      frame.contentWindow.location.reload();
+      // Ждём не «load» (гоняет с перезагрузкой), а фактической загрузки приложения:
+      // документ готов + форма на месте + список отрисован (строки или пустой экран).
+      (function waitReady(attempts) {
+        var d = frame.contentDocument;
+        var booted = d && d.readyState === 'complete' && d.getElementById('task-form') &&
+          (d.querySelector('li.task-item') || (d.getElementById('empty-state') && !d.getElementById('empty-state').hidden));
+        if (booted || attempts <= 0) { setTimeout(resolve, 120); }
+        else { setTimeout(function () { waitReady(attempts - 1); }, 100); }
+      })(50);
+    });
+  }
+
+  function submitForm() {
+    doc().getElementById('task-form').dispatchEvent(
+      new frame.contentWindow.Event('submit', { bubbles: true, cancelable: true })
+    );
+  }
+
+  function taskTexts() { return $$('.task-text').map(function (t) { return t.textContent; }); }
+  function storageList() { return JSON.parse(ls().getItem(KEY) || '[]'); }
+  function counterText() { return doc().getElementById('counter').textContent; }
+
+  var tests = [
+    ['Добавление: текст в модель, DOM и хранилище, поле очищено', function () {
+      var input = doc().getElementById('task-input');
+      input.value = 'Купить хлеб';
+      submitForm();
+      assert(taskTexts().indexOf('Купить хлеб') === 0, 'задача не в списке');
+      var list = storageList();
+      assert(list.length === 1 && list[0].text === 'Купить хлеб' && list[0].done === false, 'хранилище не совпадает');
+      assert(typeof list[0].id === 'string' && list[0].id.length > 5, 'нет стабильного id');
+      assert(input.value === '', 'поле не очищено');
+    }],
+    ['Пустой ввод: задачи нет, подсказка показана', function () {
+      var before = storageList().length;
+      doc().getElementById('task-input').value = '';
+      submitForm();
+      assert(storageList().length === before, 'пустая строка добавилась');
+      assert(!doc().getElementById('form-hint').hidden, 'подсказка не показана');
+    }],
+    ['Ввод из пробелов: задачи нет', function () {
+      var before = storageList().length;
+      doc().getElementById('task-input').value = '   ';
+      submitForm();
+      assert(storageList().length === before, 'пробелы добавились');
+    }],
+    ['Одинаковые задачи: две отдельные записи с разными id', function () {
+      var input = doc().getElementById('task-input');
+      input.value = 'Позвонить маме';
+      submitForm();
+      input.value = 'Позвонить маме';
+      submitForm();
+      var same = taskTexts().filter(function (t) { return t === 'Позвонить маме'; });
+      assert(same.length === 2, 'ожидались две одинаковые задачи');
+      var list = storageList().filter(function (t) { return t.text === 'Позвонить маме'; });
+      assert(list.length === 2 && list[0].id !== list[1].id, 'id не уникальны');
+    }],
+    ['Выполнение и возврат: состояние, хранилище и счётчик сразу', function () {
+      var li = $$('.task-item').find(function (l) { return l.textContent.indexOf('Купить хлеб') !== -1; });
+      var cb = li.querySelector('.task-check');
+      var before = storageList().find(function (t) { return t.text === 'Купить хлеб'; }).done;
+      cb.click();
+      var item = storageList().find(function (t) { return t.text === 'Купить хлеб'; });
+      assert(item.done === !before, 'хранилище не обновилось сразу');
+      assert(cb.checked === !before, 'чекбокс не отмечен');
+      assert(li.classList.contains('task-item--done'), 'нет класса выполненной');
+      assert(getComputedStyle(li.querySelector('.task-text')).textDecorationLine === 'line-through', 'нет зачёркивания');
+      assert(/Остал/.test(counterText()), 'счётчик не обновился');
+      cb.click();
+      assert(storageList().find(function (t) { return t.text === 'Купить хлеб'; }).done === before, 'возврат не сохранился');
+    }],
+    ['Все выполнены: сообщение «На сегодня всё»', function () {
+      var boxes = $$('.task-check');
+      boxes.forEach(function (b) { if (!b.checked) b.click(); });
+      assert(counterText() === 'На сегодня всё. Можно выдохнуть', 'сообщение неверно: ' + counterText());
+      assert(doc().getElementById('counter').classList.contains('counter--done'), 'нет стиля состояния');
+      boxes.forEach(function (b) { if (b.checked) b.click(); });
+    }],
+    ['Удаление: сохраняется сразу, появляется уведомление с «Отменить»', function () {
+      var target = $$('.task-item').find(function (li) { return li.textContent.indexOf('Позвонить маме') !== -1; });
+      var id = target.dataset.id;
+      var btn = target.querySelector('.task-delete');
+      assert(btn.getAttribute('type') === 'button', 'кнопка удаления не button');
+      btn.click();
+      assert(!$$('.task-item').some(function (li) { return li.dataset.id === id; }), 'строка не исчезла');
+      assert(!storageList().some(function (t) { return t.id === id; }), 'хранилище не обновилось сразу');
+      var note = doc().getElementById('undo-note');
+      assert(!note.hidden, 'уведомление не показано');
+      assert(frame.contentWindow.getComputedStyle(note).display !== 'none', 'уведомление не видно визуально');
+      assert(doc().getElementById('undo-btn').textContent === 'Отменить', 'нет кнопки «Отменить»');
+      assert(note.getAttribute('role') === 'status', 'уведомление не role=status');
+      window.__lastDeletedId = id;
+    }],
+    ['Отмена удаления: задача возвращается на прежнее место', function () {
+      doc().getElementById('undo-btn').click();
+      var texts = taskTexts();
+      assert(texts.indexOf('Позвонить маме') !== -1, 'задача не восстановлена');
+      assert(storageList().some(function (t) { return t.id === window.__lastDeletedId; }), 'восстановленной нет в хранилище');
+      assert(doc().getElementById('undo-note').hidden, 'уведомление не скрыто');
+    }],
+    ['Последовательные удаления: отменяется только последнее', function () {
+      // Добавляем три опорные задачи: А, Б, В (каждая наверх).
+      var input = doc().getElementById('task-input');
+      ['Тест А', 'Тест Б', 'Тест В'].forEach(function (t) { input.value = t; submitForm(); });
+      // Порядок в списке: Тест В, Тест Б, Тест А, ...
+      deleteByText('Тест А');
+      deleteByText('Тест Б');
+      doc().getElementById('undo-btn').click();
+      assert(taskTexts().indexOf('Тест Б') !== -1, 'последняя удалённая не вернулась');
+      assert(taskTexts().indexOf('Тест А') === -1, 'первая удалённая не должна была вернуться');
+      var texts = taskTexts();
+      assert(texts.indexOf('Тест В') < texts.indexOf('Тест Б'), 'позиция восстановления неверна');
+      // Убираем опорные: Б возвращаем и удаляем окончательно.
+      deleteByText('Тест В');
+      deleteByText('Тест Б');
+      doc().getElementById('undo-btn').click();
+      deleteByText('Тест Б');
+    }],
+    ['Удаление переживает перезагрузку страницы', function () {
+      var li = $$('.task-item').find(function (l) { return l.textContent.indexOf('Позвонить маме') !== -1; });
+      var goneId = li.dataset.id;
+      li.querySelector('.task-delete').click();
+      return reloadApp().then(function () {
+        assert(!storageList().some(function (t) { return t.id === goneId; }), 'удалённая задача вернулась');
+        assert(doc().getElementById('undo-note').hidden, 'уведомление видно после перезагрузки');
+        assert(frame.contentWindow.getComputedStyle(doc().getElementById('undo-note')).display === 'none',
+          'уведомление занимает место после перезагрузки (hidden не работает)');
+      });
+    }],
+    ['Длинный текст и спецсимволы: выводятся как текст, вёрстка не ломается', function () {
+      var evil = '<img src=x onerror="window.__xss=1">';
+      var long = 'М'.repeat(300);
+      var input = doc().getElementById('task-input');
+      input.value = evil + ' и ' + long;
+      submitForm();
+      var li = $$('.task-item').find(function (l) { return l.textContent.indexOf(long) !== -1; });
+      assert(!!li, 'длинная задача не найдена');
+      assert(li.querySelector('.task-text').textContent === evil + ' и ' + long, 'текст искажён');
+      assert(!li.querySelector('img'), 'HTML интерпретирован');
+      assert(frame.contentWindow.__xss === undefined, 'onerror исполнился!');
+      // Допуск 8px: субпиксельное округление; неразорванное слово дало бы ~2000px переполнения.
+      var over = li.scrollWidth - li.clientWidth;
+      assert(over <= 8, 'горизонтальное переполнение ' + over + 'px (scrollW=' + li.scrollWidth +
+        ', clientW=' + li.clientWidth + ', iframeOuter=' + Math.round(frame.getBoundingClientRect().width) +
+        ', iframeInner=' + frame.contentWindow.innerWidth +
+        ', liRectW=' + Math.round(li.getBoundingClientRect().width) + ')');
+      var st = frame.contentWindow.getComputedStyle(li.querySelector('.task-text'));
+      assert(st.overflowWrap === 'anywhere' || st.wordBreak === 'break-word', 'нет переноса длинного слова');
+      li.querySelector('.task-delete').click(); // уведомление скроется на перезагрузке следующего теста
+    }],
+    ['Повреждённое хранилище: предупреждение, приложение работает', function () {
+      ls().setItem(KEY, '{битые данные');
+      return reloadApp().then(function () {
+        assert(!doc().getElementById('storage-warning').hidden, 'нет предупреждения');
+        assert(taskTexts().length === 0, 'список не пуст');
+        assert(!doc().getElementById('empty-state').hidden, 'пустое состояние не показано');
+        // приложение остаётся рабочим
+        var input = doc().getElementById('task-input');
+        input.value = 'После сбоя';
+        submitForm();
+        assert(taskTexts().indexOf('После сбоя') === 0, 'добавление после сбоя не работает');
+        assert(doc().getElementById('storage-warning').hidden, 'предупреждение не скрыто после успешной записи');
+        assert(ls().getItem(KEY).indexOf('После сбоя') !== -1, 'хранилище не восстановлено');
+      });
+    }],
+    ['Ошибка записи: предупреждение вместо успешного сохранения', function () {
+      var win = frame.contentWindow;
+      var original = win.Storage.prototype.setItem;
+      win.Storage.prototype.setItem = function () { throw new win.DOMException('QuotaExceededError', 'QuotaExceededError'); };
+      try {
+        var input = doc().getElementById('task-input');
+        input.value = 'Не сохранится';
+        submitForm();
+        assert(taskTexts().indexOf('Не сохранится') === 0, 'задача не появилась в памяти');
+        assert(!doc().getElementById('storage-warning').hidden, 'нет предупреждения об ошибке записи');
+      } finally {
+        win.Storage.prototype.setItem = original;
+      }
+      // После восстановления записи всё сохраняется.
+      var input2 = doc().getElementById('task-input');
+      input2.value = 'Сохранится';
+      submitForm();
+      assert(doc().getElementById('storage-warning').hidden, 'предупреждение не скрыто');
+      assert(ls().getItem(KEY).indexOf('Сохранится') !== -1, 'не сохранилось после восстановления');
+    }],
+    ['Доступность: подписи, роли, фокус', function () {
+      assert(doc().querySelector('label[for="task-input"]'), 'у поля нет связанного label');
+      assert(doc().getElementById('task-input').getAttribute('type') === 'text', 'поле не type=text');
+      var checks = $$('.task-check');
+      assert(checks.length > 0, 'нет чекбоксов');
+      checks.forEach(function (cb) {
+        assert(cb.tagName === 'INPUT' && cb.type === 'checkbox', 'не настоящий checkbox');
+        assert(cb.closest('label') && cb.closest('label').textContent.trim().length > 0, 'чекбокс без подписи');
+      });
+      $$('.task-delete').forEach(function (b) {
+        assert(b.tagName === 'BUTTON' && b.getAttribute('type') === 'button', 'удаление не button');
+        assert((b.getAttribute('aria-label') || '').indexOf('Удалить задачу:') === 0, 'нет понятного aria-label');
+      });
+      assert(doc().getElementById('undo-btn').getAttribute('type') === 'button', 'кнопка отмены не button');
+      assert(doc().getElementById('counter').getAttribute('aria-live') === 'polite', 'счётчик не aria-live');
+      var hasFocusRule = false;
+      for (var s = 0; s < doc().styleSheets.length; s++) {
+        var rules = doc().styleSheets[s].cssRules;
+        for (var r = 0; r < rules.length; r++) {
+          if (rules[r].selectorText && rules[r].selectorText.indexOf(':focus-visible') !== -1) hasFocusRule = true;
+        }
+      }
+      assert(hasFocusRule, 'нет видимого фокуса :focus-visible');
+      // Контраст ключевых цветов (значения из CSS-переменных).
+      var cs = frame.contentWindow.getComputedStyle(doc().documentElement);
+      assert(cs.getPropertyValue('--muted').trim() === '#6d6753', 'приглушённый цвет недостаточно тёмный');
+      assert(cs.getPropertyValue('--sage-dark').trim() === '#5d7551', 'зелёный текст/кнопка недостаточно тёмные');
+    }]
+  ];
+
+  function deleteByText(text) {
+    var li = $$('.task-item').find(function (l) { return l.textContent.indexOf(text) !== -1; });
+    if (li) li.querySelector('.task-delete').click();
+  }
+
+  function run() {
+    results.innerHTML = '';
+    summary.textContent = 'Идёт прогон…';
+    backupValue = ls().getItem(KEY);
+
+    var chain = Promise.resolve();
+    // Чистый старт для тестов.
+    chain = chain.then(function () { ls().setItem(KEY, '[]'); return reloadApp(); });
+
+    tests.forEach(function (pair) {
+      chain = chain.then(function () {
+        var li = document.createElement('li');
+        li.textContent = pair[0] + ' — …';
+        results.appendChild(li);
+        return Promise.resolve()
+          .then(pair[1])
+          .then(function () { li.textContent = pair[0] + ' — OK'; li.className = 'pass'; })
+          .catch(function (e) { li.textContent = pair[0] + ' — ПРОВАЛ: ' + e.message; li.className = 'fail'; });
+      });
+    });
+
+    chain = chain.then(function () {
+      // Восстанавливаем содержимое списка пользователя.
+      if (backupValue === null) { ls().removeItem(KEY); } else { ls().setItem(KEY, backupValue); }
+      return reloadApp();
+    });
+
+    chain.then(function () {
+      var items = [...results.children];
+      var fails = items.filter(function (i) { return i.className === 'fail'; }).length;
+      summary.textContent = 'Готово: ' + (items.length - fails) + ' из ' + items.length + ' прошло' +
+        (fails ? '. Есть провалы.' : '. Все тесты зелёные.') + ' Список восстановлен.';
+    });
+  }
+
+  document.getElementById('rerun').addEventListener('click', run);
+  window.addEventListener('load', function () { setTimeout(run, 400); });
+})();
+</script>
+</body>
+</html>

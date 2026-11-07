@@ -1,0 +1,421 @@
+/* ---------------------------------------------------------------
+   Всё по порядку — тёплый бумажный ежедневник.
+   Светлая тема: молочный фон, шалфейный зелёный + тёплый оранжевый.
+   --------------------------------------------------------------- */
+
+:root {
+  --desk: #f3eee1;         /* «рабочий стол» вокруг листа */
+  --paper: #fffef8;        /* сам лист */
+  --paper-dim: #faf5e8;    /* строка под курсором */
+  --ink: #2a2721;          /* почти чёрный, тёплый */
+  --muted: #6d6753;        /* приглушённый текст (контраст ≥ 5:1) */
+  --line: #e8e1ce;         /* разделители задач */
+  --line-strong: #c9c0a6;  /* рамки полей и чекбоксов */
+  --sage: #7c9a6d;         /* шалфейный — декоративный акцент */
+  --sage-dark: #5d7551;    /* зелёный для текста и заливок кнопок (контраст ≥ 4.5:1) */
+  --sage-deeper: #4e6344;  /* hover кнопок */
+  --sage-soft: #edf2e4;
+  --orange: #d97e4a;       /* тёплый оранжевый — декор */
+  --orange-text: #b35a26;  /* оранжевый для текста (контраст ≥ 4.5:1) */
+  --orange-soft: #fbefdf;
+  --focus: #5d7551;
+  --shadow: 0 14px 34px rgba(93, 78, 46, 0.10), 0 2px 6px rgba(93, 78, 46, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--desk);
+  /* лёгкая «ткань стола» — едва заметные точки */
+  background-image: radial-gradient(rgba(120, 105, 70, 0.05) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 56px 20px 72px;
+}
+
+/* ---------- Шапка ---------- */
+
+.app-header {
+  margin-bottom: 22px;
+}
+
+.app-title {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* нарисованная линия под заголовком */
+.title-stroke {
+  display: block;
+  width: 190px;
+  height: 12px;
+  margin: 2px 0 0 4px;
+  color: var(--sage);
+  transform: rotate(-0.6deg);
+}
+
+/* дата — единственная рукописная деталь */
+.today {
+  margin: 10px 0 0 6px;
+  font-family: "Segoe Script", "Bradley Hand", "Marker Felt", "Comic Sans MS", cursive;
+  font-size: 0.92rem;
+  color: var(--muted);
+  transform: rotate(-1deg);
+}
+
+/* ---------- Форма ---------- */
+
+.task-form {
+  display: flex;
+  gap: 10px;
+}
+
+.task-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1.5px solid var(--line-strong);
+  border-radius: 10px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.task-input:hover {
+  border-color: #b3a988;
+}
+
+.task-input:focus {
+  outline: none;
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px var(--sage-soft);
+}
+
+.task-input::placeholder {
+  color: #877e60;
+}
+
+.btn-add {
+  padding: 12px 20px;
+  font: inherit;
+  font-weight: 600;
+  color: #fffdf6;
+  background: var(--sage-dark);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.btn-add:hover {
+  background: var(--sage-deeper);
+  box-shadow: 0 4px 12px rgba(78, 99, 68, 0.25);
+}
+
+/* ---------- Подсказки и предупреждения ---------- */
+
+.hint {
+  margin: 8px 2px 0;
+  font-size: 0.9rem;
+  color: #7d5f33;
+}
+
+.warning {
+  margin: 18px 0 0;
+  padding: 12px 16px;
+  font-size: 0.93rem;
+  color: #7e4a1f;
+  background: var(--orange-soft);
+  border: 1px solid #eac79e;
+  border-radius: 10px;
+}
+
+/* ---------- Лист с задачами ---------- */
+
+.sheet {
+  position: relative;
+  margin-top: 24px;
+  padding: 6px 20px 18px;
+  background: var(--paper);
+  border: 1px solid #e5ddc7;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+/* маленькая звёздочка-росчерк в углу листа */
+.sheet-star {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 20px;
+  height: 20px;
+  color: var(--orange);
+  opacity: 0.7;
+  transform: rotate(8deg);
+  pointer-events: none;
+}
+
+.counter {
+  margin: 0;
+  padding: 14px 2px 10px;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.counter--done {
+  color: var(--sage-dark);
+  font-weight: 500;
+}
+
+.task-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 2px;
+  border-radius: 6px;
+  transition: background 0.16s ease;
+}
+
+.task-item:hover {
+  background: var(--paper-dim);
+}
+
+.task-item + .task-item {
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Задача: чекбокс и текст ---------- */
+
+.task-label {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+/* настоящий чекбокс прозрачен и накрывает всю строку */
+.task-check {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* видимая коробка с нарисованной галочкой */
+.task-box {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+  border: 2px solid var(--line-strong);
+  border-radius: 6px;
+  color: #fffdf6;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.task-box svg {
+  width: 13px;
+  height: 11px;
+  display: block;
+}
+
+.check-path {
+  stroke-dasharray: 20;
+  stroke-dashoffset: 20;
+  transition: stroke-dashoffset 0.18s ease;
+}
+
+.task-check:checked + .task-box {
+  background: var(--sage-dark);
+  border-color: var(--sage-dark);
+}
+
+.task-check:checked + .task-box .check-path {
+  stroke-dashoffset: 0;
+}
+
+.task-check:focus-visible + .task-box {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.task-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  padding-top: 1px;
+}
+
+.task-item--done .task-text {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: #b9af93;
+}
+
+.task-delete {
+  flex-shrink: 0;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: #746b4f;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.task-delete:hover {
+  color: var(--orange-text);
+  background: var(--orange-soft);
+}
+
+/* ---------- Пустой лист ---------- */
+
+.empty-state {
+  margin: 0;
+  padding: 30px 10px 26px;
+  font-size: 0.97rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ---------- Отмена последнего удаления ---------- */
+
+.undo-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+}
+
+/* скрытое состояние должно побеждать display:flex */
+.undo-note[hidden] {
+  display: none;
+}
+
+.btn-undo {
+  flex-shrink: 0;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--sage-dark);
+  background: transparent;
+  border: 1.5px solid var(--sage);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.btn-undo:hover {
+  background: var(--sage-dark);
+  color: #fffdf6;
+}
+
+/* ---------- Доступность ---------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ---------- Телефон: личный список, не уменьшенная панель ---------- */
+
+@media (max-width: 480px) {
+  .app {
+    padding: 32px 14px 48px;
+  }
+
+  .app-title {
+    font-size: 1.7rem;
+  }
+
+  .task-form {
+    gap: 8px;
+  }
+
+  .btn-add {
+    padding: 12px 16px;
+  }
+
+  .sheet {
+    margin-top: 20px;
+    padding: 4px 14px 14px;
+  }
+
+  .task-item {
+    gap: 10px;
+  }
+
+  .task-label {
+    gap: 10px;
+  }
+
+  .task-delete {
+    padding: 9px 10px; /* зона нажатия пальцем */
+  }
+}
